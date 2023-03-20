@@ -41,7 +41,7 @@ public class DriveTrain extends SubsystemBase {
     m_right1.setIdleMode(IdleMode.kBrake);
     m_right1.burnFlash();
 
-    m_right2  = new CANSparkMax(CAN_IDs.driveTrain_Left2, MotorType.kBrushless);
+    m_right2  = new CANSparkMax(CAN_IDs.driveTrain_Right2, MotorType.kBrushless);
     m_right2.setInverted(DriveTrainConstants.kRightInverted);
     m_right2.setSmartCurrentLimit(DriveTrainConstants.kCurrentLimit);
     m_right2.setIdleMode(IdleMode.kBrake);
