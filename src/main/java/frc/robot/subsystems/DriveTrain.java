@@ -13,13 +13,19 @@ import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 import frc.robot.Constants.CAN_IDs;
 import frc.robot.Constants.DriveTrainConstants;
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.util.Units;
 import edu.wpi.first.util.sendable.SendableBuilder;
+import edu.wpi.first.wpilibj.SPI.Port;
 import edu.wpi.first.wpilibj2.command.CommandBase;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+
+import com.kauailabs.navx.frc.AHRS;
 
 public class DriveTrain extends SubsystemBase {
   private CANSparkMax m_left1, m_left2, m_right1, m_right2;
   private RelativeEncoder m_leftEncoder, m_rightEncoder;
+  private AHRS m_gyro;
+  private double _altitude;
 
   /** Creates a new DriveTrain. */
   public DriveTrain() {
@@ -41,7 +47,7 @@ public class DriveTrain extends SubsystemBase {
     m_right1.setIdleMode(IdleMode.kBrake);
     m_right1.burnFlash();
 
-    m_right2  = new CANSparkMax(CAN_IDs.driveTrain_Left2, MotorType.kBrushless);
+    m_right2  = new CANSparkMax(CAN_IDs.driveTrain_Right2, MotorType.kBrushless);
     m_right2.setInverted(DriveTrainConstants.kRightInverted);
     m_right2.setSmartCurrentLimit(DriveTrainConstants.kCurrentLimit);
     m_right2.setIdleMode(IdleMode.kBrake);
@@ -53,6 +59,10 @@ public class DriveTrain extends SubsystemBase {
     m_rightEncoder = m_right1.getEncoder();
     // m_rightEncoder = m_left1.getEncoder(Type.kHallSensor, 42);
     m_rightEncoder.setPositionConversionFactor(DriveTrainConstants.kPositionFactor);
+
+    m_gyro = new AHRS(Port.kMXP);
+    m_gyro.resetDisplacement();
+    m_gyro.reset();
   }
 
   public void driveArcade(double _straight, double _turn) {
@@ -63,6 +73,44 @@ public class DriveTrain extends SubsystemBase {
     m_left2.set(left);
     m_right1.set(right);
     m_right2.set(right);
+  }
+
+  private void resetGyro() {
+    m_gyro.resetDisplacement();
+    m_gyro.reset();
+    _altitude = 0.0;
+  }
+
+  private void resetEncoders() {
+    m_leftEncoder.setPosition(0);
+    m_rightEncoder.setPosition(0);
+  }
+
+  public CommandBase driveToChargeStationCmd(double speed) {
+    return this.run(() -> driveArcade(speed, 0))
+              .beforeStarting(() -> 
+                {
+                  this.resetEncoders();
+                  this.resetGyro();
+                })
+              .until(() -> 
+                {
+                  double theta, driveDist;
+                  // Note: theta is in degrees units [-180, 180], whereas Math.sin() takes radians as input
+                  theta = m_gyro.getPitch();
+                  driveDist = (m_leftEncoder.getPosition() + m_rightEncoder.getPosition()) / 2;
+                  _altitude += driveDist * Math.sin(Units.degreesToRadians(theta));
+                  // Apply some tolerance to theta
+                  // Charging station height is 9.125"
+                  // Add distanceTravelled consition also
+                  if (_altitude > 7 && (theta < 5 && theta > -5)) {
+                    return true;
+                  } else {
+                    return false;
+                  }
+                })
+              .withTimeout(10)
+              .finallyDo((interrupted) -> driveArcade(0, 0));
   }
 
   public CommandBase driveTimeCommand(double seconds, double speed) {
